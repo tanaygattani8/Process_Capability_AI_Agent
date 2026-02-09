@@ -1,0 +1,137 @@
+id: template_standard_flow
+name: Template Standard Flow
+inputs:
+  user_question:
+    type: string
+    is_chat_input: false
+  account_name:
+    type: string
+    default: ""
+    is_chat_input: false
+  account_key:
+    type: string
+    default: ""
+    is_chat_input: false
+  container_name:
+    type: string
+    default: ""
+    is_chat_input: false
+  blob_name:
+    type: string
+    default: ""
+    is_chat_input: false
+  USL:
+    type: double
+    is_chat_input: false
+  Target:
+    type: double
+    is_chat_input: false
+  LSL:
+    type: double
+    is_chat_input: false
+outputs:
+  O_ReportUrl:
+    type: string
+    reference: ${report_writer.output}
+  O_Cap_metrics:
+    type: string
+    reference: ${cap_metrics.output}
+  O_ChartUrl:
+    type: string
+    reference: ${chart_creator.output}
+  O_ProcessBehavior:
+    type: string
+    reference: ${process_behavior.output}
+  O_Aggregator:
+    type: string
+    reference: ${aggregrator.output}
+nodes:
+- name: data_access
+  type: python
+  source:
+    type: code
+    path: data_access.py
+  inputs:
+    account_key: ${inputs.account_key}
+    account_name: ${inputs.account_name}
+    blob_name: ${inputs.blob_name}
+    container_name: ${inputs.container_name}
+  use_variants: false
+- name: process_data_formatter
+  type: llm
+  source:
+    type: code
+    path: process_data_formatter.jinja2
+  inputs:
+    deployment_name: gpt-4o
+    temperature: 1
+    top_p: 1
+    response_format:
+      type: text
+    data_input: ${data_access.output}
+    lsl: ${inputs.LSL}
+    usl: ${inputs.USL}
+  provider: AzureOpenAI
+  connection: process-capability-foundry_aoai
+  api: chat
+  module: promptflow.tools.aoai
+  use_variants: false
+- name: cap_metrics
+  type: python
+  source:
+    type: code
+    path: cap_metrics.py
+  inputs:
+    I_DataPoints: ${process_data_formatter.output}
+  use_variants: false
+- name: chart_creator
+  type: python
+  source:
+    type: code
+    path: chart_creator.py
+  inputs:
+    I_ChartDataPoints: ${process_data_formatter.output}
+  use_variants: false
+- name: process_behavior
+  type: python
+  source:
+    type: code
+    path: process_behavior.py
+  inputs:
+    o_capmetrics: ${cap_metrics.output}
+    o_chart_url: ${chart_creator.output}
+  use_variants: false
+- name: aggregrator
+  type: python
+  source:
+    type: code
+    path: aggregrator.py
+  inputs:
+    o_capmetrics: ${cap_metrics.output}
+    o_chart_url: ${chart_creator.output}
+    o_processbehavior: ${process_behavior.output}
+  use_variants: false
+- name: report_generator
+  type: python
+  source:
+    type: code
+    path: report_generator.py
+  inputs:
+    o_aggregator: ${aggregrator.output}
+  use_variants: false
+- name: report_writer
+  type: python
+  source:
+    type: code
+    path: report_writer.py
+  inputs:
+    account_key: ${inputs.account_key}
+    account_name: ${inputs.account_name}
+    blob_name: ${inputs.blob_name}
+    container_name: ${inputs.container_name}
+    html_content: ${report_generator.output}
+  use_variants: false
+node_variants: {}
+environment:
+  python_requirements_txt: requirements.txt
+  variables: null
